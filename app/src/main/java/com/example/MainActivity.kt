@@ -464,7 +464,55 @@ fun LobbyBrowserView(viewModel: GameViewModel) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Firebase Status Indicator Card
+            val isFirebaseEnabled by viewModel.isFirebaseEnabled.collectAsState()
+            val firebaseStatusMessage by viewModel.firebaseStatusMessage.collectAsState()
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isFirebaseEnabled) Color(0x152ECC71) else Color(0x15E74C3C)
+                ),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (isFirebaseEnabled) Color(0x402ECC71) else Color(0x40E74C3C)
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(
+                                color = if (isFirebaseEnabled) Color(0xFF2ECC71) else Color(0xFFE74C3C),
+                                shape = CircleShape
+                            )
+                    )
+                    Column {
+                        Text(
+                            text = if (isFirebaseEnabled) "FIREBASE REAL-TIME LOBBIES" else "LOCAL EMULATION MODE (OFFLINE BOTS)",
+                            color = if (isFirebaseEnabled) Color(0xFF2ECC71) else Color(0xFFE74C3C),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = firebaseStatusMessage,
+                            color = Color.LightGray,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Create Lobby bar
             Button(

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -56,6 +57,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val anonymousVoting = MutableStateFlow(false)
     val confirmEjects = MutableStateFlow(true)
     val emergencyMeetingsLimit = MutableStateFlow(2)
+
+    // Firebase Firestore State
+    private var firestore: FirebaseFirestore? = null
+    val isFirebaseEnabled = MutableStateFlow(false)
+    val firebaseStatusMessage = MutableStateFlow("Firebase Offline: initializing...")
 
     // Matchmaking / Lobbies List
     private val _lobbies = MutableStateFlow<List<LobbyInfo>>(emptyList())
@@ -134,7 +140,60 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val scanProgress = _scanProgress.asStateFlow()
 
     init {
-        generateSimulatedLobbies()
+        try {
+            firestore = FirebaseFirestore.getInstance()
+            isFirebaseEnabled.value = true
+            firebaseStatusMessage.value = "Firebase Connected (Lobbies syncing in real-time)"
+            listenToFirebaseLobbies()
+        } catch (e: Exception) {
+            firestore = null
+            isFirebaseEnabled.value = false
+            firebaseStatusMessage.value = "Firebase Offline (Using offline simulated lobbies)"
+            generateSimulatedLobbies()
+        }
+    }
+
+    private fun listenToFirebaseLobbies() {
+        val fs = firestore ?: return
+        fs.collection("lobbies")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    firebaseStatusMessage.value = "Firebase Offline: ${error.localizedMessage}"
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = mutableListOf<LobbyInfo>()
+                    for (doc in snapshot.documents) {
+                        try {
+                            val lobby = doc.toObject(LobbyInfo::class.java)
+                            if (lobby != null) {
+                                list.add(lobby.copy(id = doc.id))
+                            }
+                        } catch (e: Exception) {
+                            // Ignored deserialization issues
+                        }
+                    }
+                    if (list.isNotEmpty()) {
+                        _lobbies.value = list
+                    } else {
+                        publishInitialLobbiesToFirebase()
+                    }
+                }
+            }
+    }
+
+    private fun publishInitialLobbiesToFirebase() {
+        val fs = firestore ?: return
+        val initialList = listOf(
+            LobbyInfo(name = "Casual Astronauts", host = "RedAlpha", playersCount = 6, mapName = "The Skeld", impostorCount = 1),
+            LobbyInfo(name = "Polus Tryhards 24/7", host = "IceCold", playersCount = 8, mapName = "Polus", impostorCount = 2),
+            LobbyInfo(name = "MIRA HQ Fun", host = "FlyHigh", playersCount = 4, mapName = "MIRA HQ", impostorCount = 1),
+            LobbyInfo(name = "No Venting Allowed", host = "SafeScan", playersCount = 3, mapName = "The Skeld", impostorCount = 1),
+            LobbyInfo(name = "Amogus Impostor Club", host = "SusLord", playersCount = 9, mapName = "The Skeld", impostorCount = 2)
+        )
+        for (lobby in initialList) {
+            fs.collection("lobbies").document(lobby.id).set(lobby)
+        }
     }
 
     fun setScreen(screen: GameScreen) {
@@ -157,7 +216,34 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     // Refresh Lobbies
     fun refreshLobbies() {
-        generateSimulatedLobbies()
+        val fs = firestore
+        if (fs != null) {
+            firebaseStatusMessage.value = "Refreshing from Firebase..."
+            fs.collection("lobbies").get()
+                .addOnSuccessListener { snapshot ->
+                    val list = mutableListOf<LobbyInfo>()
+                    for (doc in snapshot.documents) {
+                        try {
+                            val lobby = doc.toObject(LobbyInfo::class.java)
+                            if (lobby != null) {
+                                list.add(lobby.copy(id = doc.id))
+                            }
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                    }
+                    if (list.isNotEmpty()) {
+                        _lobbies.value = list
+                        firebaseStatusMessage.value = "Firebase Connected (Refreshed)"
+                    }
+                }
+                .addOnFailureListener { err ->
+                    firebaseStatusMessage.value = "Firebase Offline: ${err.localizedMessage}"
+                    generateSimulatedLobbies()
+                }
+        } else {
+            generateSimulatedLobbies()
+        }
     }
 
     // Save profile customization
@@ -211,6 +297,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         chatMessages.add(ChatMessage("System", "Joined lobby ${lobby.name}. Code: ${lobby.code}", isSystem = true))
         setScreen(GameScreen.LobbyRoom)
         simulateLobbyChat()
+
+        // Sync player count increment to Firebase if active
+        val fs = firestore
+        if (fs != null) {
+            val updatedCount = (lobby.playersCount + 1).coerceAtMost(lobby.maxPlayers)
+            fs.collection("lobbies").document(lobby.id).update("playersCount", updatedCount)
+        }
     }
 
     // Join lobby by searching for custom room code
@@ -231,7 +324,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 impostorCount = 1,
                 code = uppercaseCode
             )
-            _lobbies.value = _lobbies.value + newLobby
+            val fs = firestore
+            if (fs != null) {
+                fs.collection("lobbies").document(newLobby.id).set(newLobby)
+            } else {
+                _lobbies.value = _lobbies.value + newLobby
+            }
             joinLobby(newLobby)
             return true
         }
@@ -247,6 +345,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             mapName = mapName,
             impostorCount = impostors
         )
+        val fs = firestore
+        if (fs != null) {
+            fs.collection("lobbies").document(newLobby.id).set(newLobby)
+        } else {
+            _lobbies.value = _lobbies.value + newLobby
+        }
         _currentLobby.value = newLobby
         chatMessages.clear()
         chatMessages.add(ChatMessage("System", "Created Lobby: $finalName. Code: ${newLobby.code}", isSystem = true))
@@ -256,8 +360,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     // Leave current lobby
     fun leaveLobby() {
+        val lobby = _currentLobby.value
         _currentLobby.value = null
         setScreen(GameScreen.MainMenu)
+
+        // Decrement player count in Firebase if active
+        val fs = firestore
+        if (fs != null && lobby != null) {
+            val updatedCount = (lobby.playersCount - 1).coerceAtLeast(1)
+            fs.collection("lobbies").document(lobby.id).update("playersCount", updatedCount)
+        }
     }
 
     // Send a chat message in lobby

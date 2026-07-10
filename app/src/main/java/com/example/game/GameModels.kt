@@ -19,9 +19,9 @@ enum class GameScreen {
 
 data class LobbyInfo(
     val id: String = UUID.randomUUID().toString(),
-    val name: String,
-    val host: String,
-    val playersCount: Int,
+    val name: String = "",
+    val host: String = "",
+    val playersCount: Int = 0,
     val maxPlayers: Int = 10,
     val mapName: String = "The Skeld",
     val impostorCount: Int = 1,
