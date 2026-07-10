@@ -122,3 +122,11 @@ val AmongUsColors = mapOf(
     "Cyan" to Color(0xFF38E5E5),
     "Lime" to Color(0xFF50EF39)
 )
+
+data class BotApiKey(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val token: String,
+    val createdAt: String,
+    val isRevoked: Boolean = false
+)

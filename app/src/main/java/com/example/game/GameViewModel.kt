@@ -36,6 +36,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val achievements = repository.achievements
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Bot Integration API Keys
+    private val _botApiKeys = MutableStateFlow<List<BotApiKey>>(emptyList())
+    val botApiKeys: StateFlow<List<BotApiKey>> = _botApiKeys.asStateFlow()
+
     // UI Navigation State
     private val _currentScreen = MutableStateFlow(GameScreen.MainMenu)
     val currentScreen: StateFlow<GameScreen> = _currentScreen.asStateFlow()
@@ -170,6 +174,36 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Generate a secure API Key for Bot Integration
+    fun generateBotApiKey(name: String) {
+        val finalBotName = name.trim().ifBlank { "Automation Bot" }
+        val randomStr = (1..24).map {
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".random()
+        }.joinToString("")
+        val token = "au_live_$randomStr"
+        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        val dateStr = formatter.format(java.util.Date())
+        
+        val newKey = BotApiKey(
+            name = finalBotName,
+            token = token,
+            createdAt = dateStr
+        )
+        _botApiKeys.value = _botApiKeys.value + newKey
+    }
+
+    // Revoke an API Key
+    fun revokeBotApiKey(id: String) {
+        _botApiKeys.value = _botApiKeys.value.map { key ->
+            if (key.id == id) key.copy(isRevoked = true) else key
+        }
+    }
+
+    // Completely delete an API Key
+    fun deleteBotApiKey(id: String) {
+        _botApiKeys.value = _botApiKeys.value.filterNot { it.id == id }
+    }
+
     // Join a lobby
     fun joinLobby(lobby: LobbyInfo) {
         _currentLobby.value = lobby
@@ -177,6 +211,30 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         chatMessages.add(ChatMessage("System", "Joined lobby ${lobby.name}. Code: ${lobby.code}", isSystem = true))
         setScreen(GameScreen.LobbyRoom)
         simulateLobbyChat()
+    }
+
+    // Join lobby by searching for custom room code
+    fun joinLobbyByCode(code: String): Boolean {
+        val uppercaseCode = code.uppercase().trim()
+        if (uppercaseCode.length != 6) return false
+        val matched = _lobbies.value.firstOrNull { it.code == uppercaseCode }
+        if (matched != null) {
+            joinLobby(matched)
+            return true
+        } else {
+            // If lobby does not exist, create a private lobby on the fly with this exact code
+            val newLobby = LobbyInfo(
+                name = "Private Ship",
+                host = "PlayerHost",
+                playersCount = 1,
+                mapName = "The Skeld",
+                impostorCount = 1,
+                code = uppercaseCode
+            )
+            _lobbies.value = _lobbies.value + newLobby
+            joinLobby(newLobby)
+            return true
+        }
     }
 
     // Create custom private lobby
@@ -506,14 +564,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 return bot.copy(
                     targetX = randomRoom.x,
                     targetY = randomRoom.y,
-                    currentRoom = currentRoom
+                    currentRoom = currentRoom,
+                    vx = 0f,
+                    vy = 0f
                 )
             } else {
                 // Move directly towards center
                 val angle = atan2(ty - bot.y, tx - bot.x)
                 val nx = bot.x + cos(angle) * bot.speed * playerSpeedMultiplier.value
                 val ny = bot.y + sin(angle) * bot.speed * playerSpeedMultiplier.value
-                return bot.copy(x = nx, y = ny, currentRoom = currentRoom)
+                return bot.copy(
+                    x = nx,
+                    y = ny,
+                    vx = nx - bot.x,
+                    vy = ny - bot.y,
+                    currentRoom = currentRoom
+                )
             }
         }
 
@@ -663,6 +729,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     return bot.copy(
                         x = nx,
                         y = ny,
+                        vx = nx - bot.x,
+                        vy = ny - bot.y,
                         currentRoom = currentRoom,
                         killCooldown = updatedKillCooldown,
                         sabotageCooldown = updatedSabotageCooldown
@@ -741,6 +809,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     return bot.copy(
                         x = walkedX,
                         y = walkedY,
+                        vx = walkedX - bot.x,
+                        vy = walkedY - bot.y,
                         targetX = victim.x,
                         targetY = victim.y,
                         currentRoom = currentRoom,
@@ -1078,11 +1148,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _activeMinigameTask.value = null
     }
 
-    fun updatePlayerPosition(newX: Float, newY: Float) {
+    fun updatePlayerPosition(newX: Float, newY: Float, vx: Float = 0f, vy: Float = 0f) {
         val list = _characters.value.toMutableList()
         val index = list.indexOfFirst { it.id == myCharacterId }
         if (index != -1) {
-            list[index] = list[index].copy(x = newX, y = newY, currentRoom = GameMapData.getRoomAt(newX, newY))
+            list[index] = list[index].copy(
+                x = newX,
+                y = newY,
+                vx = vx,
+                vy = vy,
+                currentRoom = GameMapData.getRoomAt(newX, newY)
+            )
             _characters.value = list
         }
     }

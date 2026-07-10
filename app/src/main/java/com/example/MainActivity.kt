@@ -480,6 +480,56 @@ fun LobbyBrowserView(viewModel: GameViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Join by unique 6-character room code section
+            var roomCodeInput by remember { mutableStateOf("") }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF1E272C), RoundedCornerShape(10.dp))
+                    .border(1.dp, Color(0xFF2C3E50), RoundedCornerShape(10.dp))
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = roomCodeInput,
+                    onValueChange = { input ->
+                        if (input.length <= 6) roomCodeInput = input.uppercase().filter { it.isLetter() }
+                    },
+                    placeholder = { Text("ENTER 6-LETTER CODE", color = Color.Gray, fontSize = 12.sp) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFF38E5E5),
+                        unfocusedBorderColor = Color(0xFF2C3E50),
+                        focusedContainerColor = Color(0xFF0F172A),
+                        unfocusedContainerColor = Color(0xFF0F172A)
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                Button(
+                    onClick = {
+                        if (roomCodeInput.length == 6) {
+                            viewModel.joinLobbyByCode(roomCodeInput)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(44.dp),
+                    enabled = roomCodeInput.length == 6
+                ) {
+                    Text("JOIN CODE", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Lobbies List
             LazyColumn(
                 modifier = Modifier.weight(1f),
@@ -944,6 +994,182 @@ fun CustomizeView(viewModel: GameViewModel) {
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Text(skin.uppercase(), fontSize = 9.sp, color = if (selectedSkin == skin) Color.Black else Color.White)
+                        }
+                    }
+                }
+            }
+
+            // Third-Party Bot API Integration Keys Manager
+            item {
+                val apiKeys by viewModel.botApiKeys.collectAsState()
+                var newKeyName by remember { mutableStateOf("") }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                Divider(color = Color(0xFF2C3E50), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Text(
+                    text = "BOT INTEGRATION (API KEYS)",
+                    color = Color(0xFF38E5E5),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131922)),
+                    border = BorderStroke(1.dp, Color(0xFF2C3E50))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Register automated players (AI Bots) to access your lobbies and perform standard gameplay simulations.",
+                            color = Color.LightGray,
+                            fontSize = 11.sp
+                        )
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = newKeyName,
+                                onValueChange = { newKeyName = it },
+                                placeholder = { Text("BOT NAME (e.g. NavBot)", color = Color.Gray, fontSize = 11.sp) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF38E5E5),
+                                    unfocusedBorderColor = Color(0xFF2C3E50),
+                                    focusedContainerColor = Color(0xFF0F172A),
+                                    unfocusedContainerColor = Color(0xFF0F172A)
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(52.dp)
+                            )
+                            
+                            Button(
+                                onClick = {
+                                    if (newKeyName.isNotBlank()) {
+                                        viewModel.generateBotApiKey(newKeyName)
+                                        newKeyName = ""
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                                shape = RoundedCornerShape(8.dp),
+                                enabled = newKeyName.isNotBlank()
+                            ) {
+                                Text("GENERATE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        if (apiKeys.isEmpty()) {
+                            Text(
+                                text = "No active Bot integrations.",
+                                color = Color.Gray,
+                                fontSize = 11.sp,
+                                modifier = Modifier
+                                    .align(Alignment.CenterHorizontally)
+                                    .padding(vertical = 12.dp)
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                apiKeys.forEach { key ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFF1E272C), RoundedCornerShape(8.dp))
+                                            .border(1.dp, Color(0xFF2C3E50), RoundedCornerShape(8.dp))
+                                            .padding(10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = key.name,
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp
+                                                )
+                                                if (key.isRevoked) {
+                                                    Text(
+                                                        text = "REVOKED",
+                                                        color = Color.Red,
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier
+                                                            .background(Color(0x44FF0000), RoundedCornerShape(4.dp))
+                                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                } else {
+                                                    Text(
+                                                        text = "ACTIVE",
+                                                        color = Color(0xFF2ECC71),
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier
+                                                            .background(Color(0x4400FF00), RoundedCornerShape(4.dp))
+                                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = if (key.isRevoked) "••••••••••••••••••••••••" else key.token,
+                                                color = if (key.isRevoked) Color.Gray else Color(0xFFF1C40F),
+                                                fontSize = 11.sp,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "Created: ${key.createdAt}",
+                                                color = Color.Gray,
+                                                fontSize = 9.sp
+                                            )
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        
+                                        if (!key.isRevoked) {
+                                            IconButton(
+                                                onClick = { viewModel.revokeBotApiKey(key.id) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Revoke Key",
+                                                    tint = Color.Red,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        } else {
+                                            IconButton(
+                                                onClick = { viewModel.deleteBotApiKey(key.id) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Delete Key",
+                                                    tint = Color.Gray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

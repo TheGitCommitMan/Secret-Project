@@ -30,6 +30,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.cos
@@ -65,6 +69,10 @@ fun ActiveGameView(viewModel: GameViewModel) {
     // Toggleable sabotage menu overlay
     var showSabotageMenu by remember { mutableStateOf(false) }
 
+    // Keyboard Tracking
+    val focusRequester = remember { FocusRequester() }
+    val activeKeys = remember { mutableStateMapOf<Key, Boolean>() }
+
     // Joystick Position States
     var joystickDeltaX by remember { mutableStateOf(0f) }
     var joystickDeltaY by remember { mutableStateOf(0f) }
@@ -72,28 +80,80 @@ fun ActiveGameView(viewModel: GameViewModel) {
 
     val coroutineScope = rememberCoroutineScope()
 
-    // Joystick movement updater
-    LaunchedEffect(joystickDeltaX, joystickDeltaY) {
-        while (joystickDeltaX != 0f || joystickDeltaY != 0f) {
+    // Request keyboard focus immediately on load
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    // Continuous smooth movement tick loop (WASD / Arrows + Joystick + Collisions)
+    LaunchedEffect(isVenting, joystickDeltaX, joystickDeltaY, characters) {
+        while (true) {
             delay(16)
             if (isVenting) continue // cannot move while in vents
 
-            val length = sqrt(joystickDeltaX * joystickDeltaX + joystickDeltaY * joystickDeltaY)
-            if (length > 0) {
+            var moveX = 0f
+            var moveY = 0f
+
+            // 1. Process keyboard inputs
+            if (activeKeys[Key.W] == true || activeKeys[Key.DirectionUp] == true) moveY -= 1f
+            if (activeKeys[Key.S] == true || activeKeys[Key.DirectionDown] == true) moveY += 1f
+            if (activeKeys[Key.A] == true || activeKeys[Key.DirectionLeft] == true) moveX -= 1f
+            if (activeKeys[Key.D] == true || activeKeys[Key.DirectionRight] == true) moveX += 1f
+
+            // 2. Process virtual joystick inputs
+            if (joystickDeltaX != 0f || joystickDeltaY != 0f) {
+                val len = sqrt(joystickDeltaX * joystickDeltaX + joystickDeltaY * joystickDeltaY)
+                if (len > 0f) {
+                    moveX += joystickDeltaX / len
+                    moveY += joystickDeltaY / len
+                }
+            }
+
+            // 3. Normalise movement speed (no extra speed for moving diagonally)
+            val moveLength = sqrt(moveX * moveX + moveY * moveY)
+            if (moveLength > 0f) {
+                val dirX = moveX / moveLength
+                val dirY = moveY / moveLength
+
                 val speed = myChar.speed * viewModel.playerSpeedMultiplier.value
-                val dx = (joystickDeltaX / length) * speed
-                val dy = (joystickDeltaY / length) * speed
+                val dx = dirX * speed
+                val dy = dirY * speed
 
                 val nx = (myChar.x + dx).coerceIn(50f, 950f)
                 val ny = (myChar.y + dy).coerceIn(50f, 950f)
 
-                // Check collision
-                if (GameMapData.isPositionWalkable(nx, ny, isGhost = myChar.isGhost)) {
-                    viewModel.updatePlayerPosition(nx, ny)
-                } else if (GameMapData.isPositionWalkable(nx, myChar.y, isGhost = myChar.isGhost)) {
-                    viewModel.updatePlayerPosition(nx, myChar.y)
-                } else if (GameMapData.isPositionWalkable(myChar.x, ny, isGhost = myChar.isGhost)) {
-                    viewModel.updatePlayerPosition(myChar.x, ny)
+                // Inline player/boundary collision verification
+                fun isWalkable(px: Float, py: Float): Boolean {
+                    if (!GameMapData.isPositionWalkable(px, py, isGhost = myChar.isGhost)) return false
+                    if (myChar.isGhost) return true
+                    
+                    // Collision with other players (diameter 22f)
+                    for (char in characters) {
+                        if (char.id != myChar.id && !char.isDead && !char.isGhost) {
+                            val distSq = (px - char.x) * (px - char.x) + (py - char.y) * (py - char.y)
+                            if (distSq < 22f * 22f) {
+                                return false
+                            }
+                        }
+                    }
+                    return true
+                }
+
+                // 4. Try moving diagonally, or slide along X/Y axes if blocked
+                if (isWalkable(nx, ny)) {
+                    viewModel.updatePlayerPosition(nx, ny, dx, dy)
+                } else if (isWalkable(nx, myChar.y)) {
+                    viewModel.updatePlayerPosition(nx, myChar.y, dx, 0f)
+                } else if (isWalkable(myChar.x, ny)) {
+                    viewModel.updatePlayerPosition(myChar.x, ny, 0f, dy)
+                } else {
+                    // Fully blocked
+                    viewModel.updatePlayerPosition(myChar.x, myChar.y, 0f, 0f)
+                }
+            } else {
+                // Stopped moving, clear velocities to pause animations
+                if (myChar.vx != 0f || myChar.vy != 0f) {
+                    viewModel.updatePlayerPosition(myChar.x, myChar.y, 0f, 0f)
                 }
             }
         }
@@ -106,6 +166,16 @@ fun ActiveGameView(viewModel: GameViewModel) {
             .onGloballyPositioned { layoutCoordinates ->
                 screenWidth = layoutCoordinates.size.width.toFloat()
                 screenHeight = layoutCoordinates.size.height.toFloat()
+            }
+            .focusRequester(focusRequester)
+            .focusable()
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown) {
+                    activeKeys[keyEvent.key] = true
+                } else if (keyEvent.type == KeyEventType.KeyUp) {
+                    activeKeys[keyEvent.key] = false
+                }
+                true
             }
     ) {
         // Space Background visual detail (stars)
