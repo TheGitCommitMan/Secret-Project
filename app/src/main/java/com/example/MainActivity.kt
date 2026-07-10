@@ -201,6 +201,7 @@ fun AmongUsApp(viewModel: GameViewModel = viewModel()) {
                     GameScreen.EmergencyMeeting -> EmergencyMeetingView(viewModel)
                     GameScreen.EjectionScreen -> EjectionScreenView(viewModel)
                     GameScreen.GameOverScreen -> GameOverScreenView(viewModel)
+                    GameScreen.IntroScreen -> IntroScreenView(viewModel)
                 }
             }
 
@@ -1789,6 +1790,110 @@ fun GameOverScreenView(viewModel: GameViewModel) {
             shape = RoundedCornerShape(10.dp)
         ) {
             Text("RETURN TO MAIN MENU", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+// 11. SHHH! INTRO / ROLE REVEAL SCREEN
+@Composable
+fun IntroScreenView(viewModel: GameViewModel) {
+    val characters by viewModel.characters.collectAsState()
+    val myChar = characters.firstOrNull { it.id == viewModel.myCharacterId } ?: return
+
+    val isImpostor = myChar.isImpostor
+
+    val infiniteTransition = rememberInfiniteTransition(label = "IntroDrift")
+    val driftY by infiniteTransition.animateFloat(
+        initialValue = -15f,
+        targetValue = 15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "DriftAnimation"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black),
+        contentAlignment = Alignment.Center
+    ) {
+        // Space Background with stars
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind {
+                    repeat(20) { idx ->
+                        drawCircle(
+                            color = Color.White,
+                            radius = 1.2f,
+                            center = Offset(
+                                x = (idx * 45f) % this.size.width,
+                                y = (idx * 75f) % this.size.height
+                            )
+                        )
+                    }
+                }
+        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Text(
+                text = "🤫 SHHH!",
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(30.dp))
+
+            // Animated Floating Crewmate Sprite
+            Box(
+                modifier = Modifier
+                    .offset(y = driftY.dp)
+                    .size(100.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CrewmateSprite(
+                    colorName = myChar.colorName,
+                    hatId = myChar.hatId,
+                    skinId = myChar.skinId,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            Text(
+                text = if (isImpostor) "IMPOSTOR" else "CREWMATE",
+                color = if (isImpostor) Color(0xFFC61A1A) else Color(0xFF38E5E5),
+                fontSize = 36.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 4.sp,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = if (isImpostor) {
+                    "There are ${characters.count { it.isImpostor }} Impostors among us.\nKill everyone without getting caught!"
+                } else {
+                    "Complete all tasks or find the Impostor!\nStay alert."
+                },
+                color = Color.LightGray,
+                fontSize = 14.sp,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
+            )
         }
     }
 }

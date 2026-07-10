@@ -14,7 +14,8 @@ enum class GameScreen {
     ActiveGame,
     EmergencyMeeting,
     EjectionScreen,
-    GameOverScreen
+    GameOverScreen,
+    IntroScreen
 }
 
 data class LobbyInfo(

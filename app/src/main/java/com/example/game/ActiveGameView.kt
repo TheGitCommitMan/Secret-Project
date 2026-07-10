@@ -19,6 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -27,6 +30,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -370,21 +375,37 @@ fun ActiveGameView(viewModel: GameViewModel) {
         }
 
         // 7. Dynamic Vision Masking (Crewmate vignette circle, shrunk if lights are out)
-        if (!myChar.isImpostor && !myChar.isGhost) {
-            val isLightsOut = activeSabotage.type == ActiveSabotageType.LightsOut
-            val baseVision = viewModel.crewmateVisionSetting.collectAsState().value
-            val visionRadius = if (isLightsOut) 50f else baseVision
+        val isLightsOut = activeSabotage.type == ActiveSabotageType.LightsOut
+        val baseVision = viewModel.crewmateVisionSetting.collectAsState().value
+        val isGhost = myChar.isGhost
 
+        if (!isGhost) {
+            val visionRadius = if (myChar.isImpostor) {
+                viewModel.impostorVisionSetting.collectAsState().value
+            } else {
+                if (isLightsOut) 55f else baseVision
+            }
+
+            val density = LocalDensity.current.density
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .drawBehind {
-                        // Draw ambient black everywhere except the player's vision circle
-                        val canvasWidth = size.width
-                        val canvasHeight = size.height
-
-                        // Draw dark overlay with transparency circle
-                        drawRect(Color(0x33000000))
+                    .graphicsLayer {
+                        alpha = 0.99f
+                    }
+                    .drawWithContent {
+                        drawContent()
+                        
+                        // Draw full deep pitch black overlay
+                        drawRect(Color(0xFA05070B))
+                        
+                        // Clear a circle centered on the screen (the player's position)
+                        drawCircle(
+                            color = Color.Transparent,
+                            radius = visionRadius * density,
+                            center = Offset(size.width / 2f, size.height / 2f),
+                            blendMode = BlendMode.Clear
+                        )
                     }
             )
         }
@@ -707,6 +728,87 @@ fun ActiveGameView(viewModel: GameViewModel) {
                 viewModel.triggerSabotage(type)
                 showSabotageMenu = false
             }, onClose = { showSabotageMenu = false })
+        }
+
+        // 9. KILLED BY IMPOSTOR SLASH OVERLAY
+        val justKilledByName by viewModel.justKilledByName.collectAsState()
+        if (justKilledByName != null) {
+            LaunchedEffect(justKilledByName) {
+                delay(3500)
+                viewModel.clearJustKilled()
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xE5050508)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(120.dp)
+                            .drawBehind {
+                                // Draw a dramatic blood-red visual slash
+                                drawLine(
+                                    color = Color(0xFFC61A1A),
+                                    start = Offset(10f, 10f),
+                                    end = Offset(size.width - 10f, size.height - 10f),
+                                    strokeWidth = 12f
+                                )
+                                drawLine(
+                                    color = Color(0xFFC61A1A),
+                                    start = Offset(size.width - 10f, 10f),
+                                    end = Offset(10f, size.height - 10f),
+                                    strokeWidth = 12f
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "💀",
+                            fontSize = 64.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text(
+                        text = "ELIMINATED",
+                        color = Color(0xFFC61A1A),
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 2.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "You were killed by ${justKilledByName}.",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "You are now a GHOST. You can float through walls and complete tasks!",
+                        color = Color.LightGray,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+            }
         }
     }
 }

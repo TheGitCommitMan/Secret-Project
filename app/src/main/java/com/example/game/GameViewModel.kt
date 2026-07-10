@@ -144,6 +144,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _scanProgress = MutableStateFlow(0)
     val scanProgress = _scanProgress.asStateFlow()
 
+    private val _justKilledByName = MutableStateFlow<String?>(null)
+    val justKilledByName = _justKilledByName.asStateFlow()
+
+    fun clearJustKilled() {
+        _justKilledByName.value = null
+    }
+
     init {
         try {
             if (FirebaseApp.getApps(application).isEmpty()) {
@@ -693,8 +700,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             repository.incrementStats(gamesPlayed = 1)
         }
 
-        setScreen(GameScreen.ActiveGame)
-        startGameLoop()
+        setScreen(GameScreen.IntroScreen)
+        viewModelScope.launch {
+            delay(4000)
+            setScreen(GameScreen.ActiveGame)
+            startGameLoop()
+        }
     }
 
     // Toggle scanning action
@@ -1162,6 +1173,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             // If user is killed
             if (victim.id == myCharacterId) {
+                _justKilledByName.value = impostor.name
                 chatMessages.add(ChatMessage("System", "You were killed by ${impostor.name}!", isSystem = true))
             }
         }

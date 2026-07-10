@@ -33,13 +33,7 @@ A complete, stunning, high-fidelity 2D recreation of **Among Us** built entirely
 ### 5. Polished Among Us Aesthetic
 * **Vector Art Painter**: Custom canvas-drawn crewmates featuring realistic helmets, backpacks, and visors with realistic gradient glares.
 * **Cosmetic Layering**: Support for customizable suits (Suit, Astronaut, Doctor, Police) and hats (Sprout, Toilet Paper, Viking, Chef, Cowboy, Astronaut).
-* **Game Loop Engine**: Implements the full gameplay loop including emergency meeting voting, anonymous ballots, ejection screens, ghost sports, and localized proximity vision.
-
----
-
-## 🎨 Media & Visuals
-* **Canvas-Drawn Crewmates**: Every crewmate is rendered procedurally using Android's Canvas API, allowing for dynamic color swaps and smooth animation of backpacks and visors.
-* **Interactive Task Visuals**: Task minigames feature custom-drawn interfaces—from the sliding card in Admin to the reactive wiring in Electrical—providing a tactile feel built entirely without external image assets.
+* **Game Loop Engine**: Implements the full gameplay loop including emergency meeting voting, anonymous ballots, ejection screens, ghost spectating, and localized proximity vision.
 
 ---
 
