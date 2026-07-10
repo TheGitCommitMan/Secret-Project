@@ -5,10 +5,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,8 +29,10 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -38,6 +43,91 @@ import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@Composable
+fun VibrantButton(
+    text: String,
+    color: Color,
+    shadowColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    textColor: Color = Color.White,
+    isSmall: Boolean = false
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val buttonHeight = if (isSmall) 46.dp else 56.dp
+    val shadowOffset = if (isSmall) 4.dp else 6.dp
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(buttonHeight)
+    ) {
+        // Shadow layer
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .padding(top = shadowOffset)
+                .background(shadowColor, RoundedCornerShape(16.dp))
+        )
+
+        // Foreground layer
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (isSmall) 40.dp else 48.dp)
+                .offset(y = if (isPressed) shadowOffset else 0.dp)
+                .background(color, RoundedCornerShape(16.dp))
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                color = textColor,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.SansSerif,
+                fontSize = if (isSmall) 13.sp else 16.sp,
+                letterSpacing = 1.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun UtilityIconButton(
+    icon: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .background(
+                if (isPressed) Color(0xFF334155) else Color(0xFF1E293B),
+                CircleShape
+            )
+            .border(2.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = icon, fontSize = 20.sp)
+    }
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,7 +136,7 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF060913)
+                    color = Color(0xFF0E1015)
                 ) {
                     AmongUsApp()
                 }
@@ -69,7 +159,24 @@ fun AmongUsApp(viewModel: GameViewModel = viewModel()) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(Color(0xFF060913))
+                .background(Color(0xFF0E1015))
+                .drawBehind {
+                    // High-fidelity background stars from the design
+                    val starPositions = listOf(
+                        Offset(size.width * 0.10f, size.height * 0.05f),
+                        Offset(size.width * 0.80f, size.height * 0.15f),
+                        Offset(size.width * 0.20f, size.height * 0.40f),
+                        Offset(size.width * 0.90f, size.height * 0.70f),
+                        Offset(size.width * 0.50f, size.height * 0.50f)
+                    )
+                    starPositions.forEach { pos ->
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.25f),
+                            radius = 3f,
+                            center = pos
+                        )
+                    }
+                }
         ) {
             AnimatedContent(
                 targetState = currentScreen,
@@ -118,149 +225,191 @@ fun AmongUsApp(viewModel: GameViewModel = viewModel()) {
 @Composable
 fun MainMenuView(viewModel: GameViewModel) {
     val profile by viewModel.playerProfile.collectAsState()
-    var rotateAngle by remember { mutableStateOf(0f) }
+    
+    val infiniteTransition = rememberInfiniteTransition(label = "FloatTransition")
+    val floatOffset by infiniteTransition.animateFloat(
+        initialValue = -12f,
+        targetValue = 12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "FloatOffset"
+    )
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(16)
-            rotateAngle = (rotateAngle + 0.3f) % 360f
-        }
-    }
+    val rotateAngle by infiniteTransition.animateFloat(
+        initialValue = -5f,
+        targetValue = 5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "RotateAngle"
+    )
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
+        modifier = Modifier.fillMaxSize()
     ) {
-        // Floating visual background details
-        Box(
-            modifier = Modifier
-                .size(180.dp)
-                .align(Alignment.TopCenter)
-                .offset(y = 40.dp)
-                .rotate(rotateAngle),
-            contentAlignment = Alignment.Center
-        ) {
-            // Space Ship circular frame
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .border(2.dp, Color(0x22FFFFFF), CircleShape)
-            )
-            // Drifting stars inside frame
-            Text("⭐", fontSize = 28.sp, modifier = Modifier.offset(x = (-40).dp, y = (-40).dp))
-            Text("🚀", fontSize = 24.sp, modifier = Modifier.offset(x = 50.dp, y = 20.dp))
-        }
-
+        // Main content column
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxWidth()
+            verticalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 40.dp, bottom = 100.dp, start = 24.dp, end = 24.dp)
         ) {
-            Text(
-                text = "AMONG US",
-                fontSize = 42.sp,
-                fontWeight = FontWeight.Black,
-                fontFamily = FontFamily.Monospace,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            Text(
-                text = "ONLINE SPACE ODYSSEY",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF38E5E5),
-                letterSpacing = 3.sp,
-                modifier = Modifier.padding(bottom = 24.dp)
-            )
-
-            // Current Player Indicator
-            Card(
-                modifier = Modifier.fillMaxWidth(0.85f),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF161F2C))
+            // Header: Title and subtitle
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Text(
+                    text = "AMONG US",
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.SansSerif,
+                    color = Color.White,
+                    fontStyle = FontStyle.Italic,
+                    textAlign = TextAlign.Center,
+                    style = androidx.compose.ui.text.TextStyle(
+                        shadow = Shadow(
+                            color = Color.Black,
+                            offset = Offset(0f, 10f),
+                            blurRadius = 0f
+                        )
+                    ),
+                    letterSpacing = (-2).sp,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+
+                Text(
+                    text = "INNERSLOTH CLONE",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF94A3B8), // slate-400
+                    letterSpacing = 3.sp
+                )
+            }
+
+            // Stylized floating Among Us character
+            Box(
+                modifier = Modifier
+                    .size(160.dp)
+                    .offset(y = floatOffset.dp)
+                    .rotate(rotateAngle),
+                contentAlignment = Alignment.Center
+            ) {
+                profile?.let {
+                    CrewmateSprite(
+                        colorName = it.colorName,
+                        hatId = it.hatId,
+                        skinId = it.skinId,
+                        modifier = Modifier.size(120.dp)
+                    )
+                }
+            }
+
+            // Current Player Indicator & Action buttons
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Current Player Indicator Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(0.9f),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        profile?.let {
-                            CrewmateSprite(
-                                colorName = it.colorName,
-                                hatId = it.hatId,
-                                skinId = it.skinId,
-                                modifier = Modifier.size(40.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(it.playerName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text("Lvl 1 Crewmate", color = Color.Gray, fontSize = 11.sp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            profile?.let {
+                                CrewmateSprite(
+                                    colorName = it.colorName,
+                                    hatId = it.hatId,
+                                    skinId = it.skinId,
+                                    modifier = Modifier.size(44.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = it.playerName,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    )
+                                    Text("Lvl 1 Crewmate", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                                }
                             }
                         }
+                        
+                        Button(
+                            onClick = { viewModel.setScreen(GameScreen.Customize) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF475569)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(36.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp)
+                        ) {
+                            Text("Edit", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
-                    Button(
-                        onClick = { viewModel.setScreen(GameScreen.Customize) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF34495E)),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("Edit", color = Color.White, fontSize = 12.sp)
-                    }
                 }
+
+                // Two primary chunky 3D buttons
+                VibrantButton(
+                    text = "LOCAL PLAY (BOTS)",
+                    color = Color(0xFFF1F5F9), // slate-100
+                    shadowColor = Color(0xFF94A3B8), // slate-400
+                    textColor = Color(0xFF0F172A), // slate-900
+                    onClick = {
+                        viewModel.createLobby("Space Hub Local", "The Skeld", 1)
+                    },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                )
+
+                VibrantButton(
+                    text = "ONLINE LOBBIES",
+                    color = Color(0xFF3B82F6), // blue-500
+                    shadowColor = Color(0xFF1D4ED8), // blue-700
+                    textColor = Color.White,
+                    onClick = {
+                        viewModel.refreshLobbies()
+                        viewModel.setScreen(GameScreen.LobbyBrowser)
+                    },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                )
             }
+        }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Menu Options List
-            MenuButton(
-                text = "LOCAL PLAY (BOTS)",
-                color = Color(0xFF2ECC71),
-                onClick = {
-                    // Start directly with a simulated single-player bots setup in Skeld
-                    viewModel.createLobby("Space Hub Local", "The Skeld", 1)
-                }
-            )
-
-            MenuButton(
-                text = "ONLINE LOBBIES",
-                color = Color(0xFF2980B9),
-                onClick = {
-                    viewModel.refreshLobbies()
-                    viewModel.setScreen(GameScreen.LobbyBrowser)
-                }
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(0.85f),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    MenuButton(
-                        text = "STATS",
-                        color = Color(0xFF95A5A6),
-                        onClick = { viewModel.setScreen(GameScreen.Stats) }
-                    )
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    MenuButton(
-                        text = "MEDALS",
-                        color = Color(0xFFF1C40F),
-                        onClick = { viewModel.setScreen(GameScreen.Achievements) }
-                    )
-                }
+        // Bottom utility bar
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(84.dp)
+                .background(Color(0xFF0F172A).copy(alpha = 0.6f))
+                .border(
+                    BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                )
+                .padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                UtilityIconButton("⚙️", onClick = { viewModel.setScreen(GameScreen.Settings) })
+                UtilityIconButton("📊", onClick = { viewModel.setScreen(GameScreen.Stats) })
             }
-
-            MenuButton(
-                text = "SETTINGS",
-                color = Color(0xFF7F8C8D),
-                onClick = { viewModel.setScreen(GameScreen.Settings) }
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                UtilityIconButton("🛍️", onClick = { viewModel.setScreen(GameScreen.Achievements) })
+                UtilityIconButton("👤", onClick = { viewModel.setScreen(GameScreen.Customize) })
+            }
         }
     }
 }
@@ -271,22 +420,13 @@ fun MenuButton(
     color: Color,
     onClick: () -> Unit
 ) {
-    Button(
+    VibrantButton(
+        text = text,
+        color = color,
+        shadowColor = color.copy(alpha = 0.7f),
         onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = color),
-        modifier = Modifier
-            .fillMaxWidth(0.85f)
-            .height(52.dp),
-        shape = RoundedCornerShape(10.dp)
-    ) {
-        Text(
-            text = text,
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            fontFamily = FontFamily.Monospace,
-            color = if (color == Color(0xFFF1C40F)) Color.Black else Color.White
-        )
-    }
+        modifier = Modifier.fillMaxWidth(0.85f)
+    )
 }
 
 // 2. LOBBY BROWSER SCREEN
