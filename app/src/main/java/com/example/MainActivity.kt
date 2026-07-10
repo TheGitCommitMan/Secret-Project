@@ -28,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -202,6 +204,7 @@ fun AmongUsApp(viewModel: GameViewModel = viewModel()) {
                     GameScreen.EjectionScreen -> EjectionScreenView(viewModel)
                     GameScreen.GameOverScreen -> GameOverScreenView(viewModel)
                     GameScreen.IntroScreen -> IntroScreenView(viewModel)
+                    GameScreen.TeamLove -> TeamLoveView(viewModel)
                 }
             }
 
@@ -410,6 +413,10 @@ fun MainMenuView(viewModel: GameViewModel) {
                 UtilityIconButton("⚙️", onClick = { viewModel.setScreen(GameScreen.Settings) })
                 UtilityIconButton("📊", onClick = { viewModel.setScreen(GameScreen.Stats) })
             }
+            
+            // Central Team Love button!
+            UtilityIconButton("💝", onClick = { viewModel.setScreen(GameScreen.TeamLove) })
+
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 UtilityIconButton("🛍️", onClick = { viewModel.setScreen(GameScreen.Achievements) })
                 UtilityIconButton("👤", onClick = { viewModel.setScreen(GameScreen.Customize) })
@@ -1897,3 +1904,330 @@ fun IntroScreenView(viewModel: GameViewModel) {
         }
     }
 }
+
+// 12. CUTE CUSTOM FONT RENDERER & TEAM LOVE VIEW
+@Composable
+fun CuteFontText(
+    text: String,
+    color: Color = Color.White,
+    fontSizeSp: Float = 14f
+) {
+    val lines = text.split("\n")
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        lines.forEach { line ->
+            // Simple space separation, showing inline flow for cute letters
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start,
+                modifier = Modifier.padding(vertical = 2.dp)
+            ) {
+                val words = line.split(" ")
+                words.forEachIndexed { wordIdx, word ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        word.forEach { char ->
+                            when (char.lowercaseChar()) {
+                                'i' -> {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center,
+                                        modifier = Modifier.padding(horizontal = 0.5.dp)
+                                    ) {
+                                        Text("❤️", fontSize = (fontSizeSp * 0.5f).sp, modifier = Modifier.height((fontSizeSp * 0.5f).dp))
+                                        Text("i", color = color, fontSize = fontSizeSp.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                    }
+                                }
+                                'o' -> {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.padding(horizontal = 0.5.dp)
+                                    ) {
+                                        Text("O", color = color, fontSize = fontSizeSp.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(0.5.dp),
+                                            modifier = Modifier.offset(y = (-1).dp)
+                                        ) {
+                                            Box(modifier = Modifier.size((fontSizeSp * 0.12f).dp).background(Color.Black, CircleShape))
+                                            Box(modifier = Modifier.size((fontSizeSp * 0.12f).dp).background(Color.Black, CircleShape))
+                                        }
+                                    }
+                                }
+                                'u' -> {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.padding(horizontal = 0.5.dp)
+                                    ) {
+                                        Text("U", color = color, fontSize = fontSizeSp.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                        Text("‿", color = Color(0xFFFF4B4B), fontSize = (fontSizeSp * 0.5f).sp, modifier = Modifier.offset(y = (fontSizeSp * 0.14f).dp))
+                                    }
+                                }
+                                'a' -> {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.padding(horizontal = 0.5.dp)
+                                    ) {
+                                        Text("A", color = color, fontSize = fontSizeSp.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                        Text("🌱", fontSize = (fontSizeSp * 0.5f).sp, modifier = Modifier.offset(y = (-fontSizeSp * 0.45f).dp))
+                                    }
+                                }
+                                else -> {
+                                    Text(
+                                        text = char.toString(),
+                                        color = color,
+                                        fontSize = fontSizeSp.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        modifier = Modifier.padding(horizontal = 0.5.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (wordIdx < words.size - 1) {
+                        Spacer(modifier = Modifier.width((fontSizeSp * 0.45f).dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TeamLoveView(viewModel: GameViewModel) {
+    val compliments = listOf(
+        "Unrivaled Code Synergy: Your collaborations turn complex ideas into polished masterpieces!",
+        "Absolute Resiliency: You face build challenges, bugs, and obstacles with unbeatable teamwork.",
+        "Pristine Craftsmanship: Every single pixel, layout choice, and code style is built with loving care.",
+        "Heartwarming Crewmates: Working beside you is safer and cozier than a scan in MedBay.",
+        "Cosmic Creativity: Your ideas shine brighter than all the stars in the cosmos.",
+        "Flawless Execution: You debug, refine, and ship features like legendary pilots.",
+        "Positive Energy Shield: Your inspiring comments and messages lift the entire team's spirit.",
+        "Always Supportive: You never abandon a friend or leave a pull request unattended.",
+        "Aesthetic Visionaries: You turn simple screens into beautiful, tactile work of arts.",
+        "Legendary Bond: The creative trust you share is stronger than the reinforced hull of a spaceship!"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "PulseTransition")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "HeartPulse"
+    )
+
+    val angle by infiniteTransition.animateFloat(
+        initialValue = -5f,
+        targetValue = 5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "SparkAngle"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0B0F19))
+    ) {
+        // Starry backdrop
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind {
+                    repeat(25) { idx ->
+                        drawCircle(
+                            color = Color(0x7FFFFFFF),
+                            radius = 1.5f,
+                            center = Offset(
+                                x = (idx * 57f) % this.size.width,
+                                y = (idx * 83f) % this.size.height
+                            )
+                        )
+                    }
+                }
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Animated Heart Banner
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .rotate(angle)
+                    .size(64.dp)
+                    .background(Color(0xFFFF3366).copy(alpha = 0.15f), CircleShape)
+                    .border(1.5.dp, Color(0xFFFF3366).copy(alpha = 0.4f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("💖", fontSize = 32.sp)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Cute styled title in our own font
+            CuteFontText(text = "I LOVE MY TEAM <3", color = Color(0xFFFF3366), fontSizeSp = 24f)
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Text(
+                text = "SECRET TEAM APPRECIATION DECK",
+                color = Color.Gray,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Scrollable Compliments Document
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF131B2E)),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color(0x33FF3366)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "📜 OFFICIAL STATEMENT",
+                        color = Color(0xFFFFD700),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    Divider(color = Color(0x1AFFFFFF), thickness = 1.dp)
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0x1AFFFFFF)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("💌", fontSize = 24.sp, modifier = Modifier.padding(end = 12.dp))
+                                    Column {
+                                        CuteFontText(
+                                            text = "to our beloved crewmates",
+                                            color = Color(0xFF38E5E5),
+                                            fontSizeSp = 14f
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Thank you for being the most incredible, brilliant, and kind developers. This ship would drift aimlessly without your cosmic energy!",
+                                            color = Color.LightGray,
+                                            fontSize = 11.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            lineHeight = 16.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        items(compliments) { item ->
+                            val parts = item.split(":")
+                            val title = parts.getOrNull(0) ?: ""
+                            val body = parts.getOrNull(1) ?: ""
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = "⭐️",
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.padding(top = 2.dp, end = 8.dp)
+                                )
+                                Column {
+                                    CuteFontText(
+                                        text = title.trim(),
+                                        color = Color(0xFFFFF700),
+                                        fontSizeSp = 13f
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = body.trim(),
+                                        color = Color(0xFFE2E8F0),
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0x1AFF3366), RoundedCornerShape(8.dp))
+                                    .padding(12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CuteFontText(
+                                    text = "you are simply the best <3",
+                                    color = Color(0xFFFF3366),
+                                    fontSizeSp = 14f
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Return to Main Menu
+            Button(
+                onClick = { viewModel.setScreen(GameScreen.MainMenu) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3366)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Text(
+                    text = "BACK TO SHIP HANGAR 🚀",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+    }
+}
+
