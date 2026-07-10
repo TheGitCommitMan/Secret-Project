@@ -1,0 +1,6 @@
+{
+  "name": "Among Us",
+  "description": "Recreation of the hit social deduction game featuring character movement, customized cosmetics, simulated matchmaking lobbies, full maps, task minigames, sabotages, vents, emergency meetings, and AI bots.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
