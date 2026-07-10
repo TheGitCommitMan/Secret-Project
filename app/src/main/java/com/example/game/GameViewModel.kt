@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -62,6 +64,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var firestore: FirebaseFirestore? = null
     val isFirebaseEnabled = MutableStateFlow(false)
     val firebaseStatusMessage = MutableStateFlow("Firebase Offline: initializing...")
+    private var chatListenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
+    private var positionsListenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
+    private var tickCounter = 0
 
     // Matchmaking / Lobbies List
     private val _lobbies = MutableStateFlow<List<LobbyInfo>>(emptyList())
@@ -141,6 +146,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         try {
+            if (FirebaseApp.getApps(application).isEmpty()) {
+                val options = FirebaseOptions.Builder()
+                    .setApplicationId("1:1234567890:android:abcdef")
+                    .setProjectId("amongus-studio-recreation")
+                    .setApiKey("placeholder_api_key")
+                    .build()
+                FirebaseApp.initializeApp(application, options)
+            }
             firestore = FirebaseFirestore.getInstance()
             isFirebaseEnabled.value = true
             firebaseStatusMessage.value = "Firebase Connected (Lobbies syncing in real-time)"
@@ -175,6 +188,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     if (list.isNotEmpty()) {
                         _lobbies.value = list
+                        
+                        // Update current lobby state in real-time if we are currently in it
+                        val current = _currentLobby.value
+                        if (current != null) {
+                            val updatedCurrent = list.firstOrNull { it.id == current.id }
+                            if (updatedCurrent != null) {
+                                _currentLobby.value = updatedCurrent
+                            }
+                        }
                     } else {
                         publishInitialLobbiesToFirebase()
                     }
@@ -290,6 +312,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _botApiKeys.value = _botApiKeys.value.filterNot { it.id == id }
     }
 
+    // Encodes current player profile for lobby synchronization
+    fun getEncodedProfileString(): String {
+        val profile = playerProfile.value ?: PlayerProfile()
+        return "${profile.playerName}|${profile.colorName}|${profile.hatId}|${profile.skinId}|${profile.petId}"
+    }
+
     // Join a lobby
     fun joinLobby(lobby: LobbyInfo) {
         _currentLobby.value = lobby
@@ -298,11 +326,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         setScreen(GameScreen.LobbyRoom)
         simulateLobbyChat()
 
-        // Sync player count increment to Firebase if active
+        // Sync player to Firebase if active
         val fs = firestore
         if (fs != null) {
-            val updatedCount = (lobby.playersCount + 1).coerceAtMost(lobby.maxPlayers)
-            fs.collection("lobbies").document(lobby.id).update("playersCount", updatedCount)
+            val profileStr = getEncodedProfileString()
+            val profileName = playerProfile.value?.playerName ?: "Crewmate"
+            val updatedList = (lobby.playersList.filterNot { it.startsWith("$profileName|") } + profileStr)
+            val updatedCount = updatedList.size.coerceIn(1, lobby.maxPlayers)
+            val updatedLobby = lobby.copy(playersCount = updatedCount, playersList = updatedList)
+            _currentLobby.value = updatedLobby
+            fs.collection("lobbies").document(lobby.id).set(updatedLobby)
+            
+            // Listen to chat and positions
+            listenToLobbyChat(lobby.id)
+            listenToOtherPlayerPositions(lobby.id)
         }
     }
 
@@ -316,17 +353,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             return true
         } else {
             // If lobby does not exist, create a private lobby on the fly with this exact code
+            val profileStr = getEncodedProfileString()
             val newLobby = LobbyInfo(
                 name = "Private Ship",
-                host = "PlayerHost",
+                host = playerProfile.value?.playerName ?: "Crewmate",
                 playersCount = 1,
                 mapName = "The Skeld",
                 impostorCount = 1,
-                code = uppercaseCode
+                code = uppercaseCode,
+                playersList = listOf(profileStr)
             )
             val fs = firestore
             if (fs != null) {
                 fs.collection("lobbies").document(newLobby.id).set(newLobby)
+                listenToLobbyChat(newLobby.id)
+                listenToOtherPlayerPositions(newLobby.id)
             } else {
                 _lobbies.value = _lobbies.value + newLobby
             }
@@ -338,16 +379,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Create custom private lobby
     fun createLobby(name: String, mapName: String, impostors: Int) {
         val finalName = name.ifBlank { "My Space Ship" }
+        val profileStr = getEncodedProfileString()
         val newLobby = LobbyInfo(
             name = finalName,
             host = playerProfile.value?.playerName ?: "Crewmate",
             playersCount = 1,
             mapName = mapName,
-            impostorCount = impostors
+            impostorCount = impostors,
+            playersList = listOf(profileStr)
         )
         val fs = firestore
         if (fs != null) {
             fs.collection("lobbies").document(newLobby.id).set(newLobby)
+            listenToLobbyChat(newLobby.id)
+            listenToOtherPlayerPositions(newLobby.id)
         } else {
             _lobbies.value = _lobbies.value + newLobby
         }
@@ -364,11 +409,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _currentLobby.value = null
         setScreen(GameScreen.MainMenu)
 
+        chatListenerRegistration?.remove()
+        chatListenerRegistration = null
+        positionsListenerRegistration?.remove()
+        positionsListenerRegistration = null
+
         // Decrement player count in Firebase if active
         val fs = firestore
         if (fs != null && lobby != null) {
-            val updatedCount = (lobby.playersCount - 1).coerceAtLeast(1)
-            fs.collection("lobbies").document(lobby.id).update("playersCount", updatedCount)
+            val profileName = playerProfile.value?.playerName ?: "Crewmate"
+            val updatedList = lobby.playersList.filterNot { it.startsWith("$profileName|") }
+            val updatedCount = updatedList.size.coerceAtLeast(1)
+            val updatedLobby = lobby.copy(
+                playersCount = updatedCount,
+                playersList = updatedList
+            )
+            fs.collection("lobbies").document(lobby.id).set(updatedLobby)
         }
     }
 
@@ -376,9 +432,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun sendChatMessage(text: String) {
         if (text.isBlank()) return
         val author = playerProfile.value?.playerName ?: "Crewmate"
-        chatMessages.add(ChatMessage(author, text))
+        val lobby = _currentLobby.value
 
-        // Trigger bot responses sometimes
+        val fs = firestore
+        if (fs != null && lobby != null) {
+            val messageData = hashMapOf(
+                "author" to author,
+                "text" to text,
+                "isSystem" to false,
+                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            )
+            fs.collection("lobbies").document(lobby.id).collection("messages").add(messageData)
+        } else {
+            chatMessages.add(ChatMessage(author, text))
+            // offline simulated responses
+            simulateBotChatResponse(text)
+        }
+    }
+
+    private fun simulateBotChatResponse(text: String) {
         viewModelScope.launch {
             delay(1000)
             val botNames = listOf("CyanPanda", "LimeJuice", "Pinky", "OrangeJuice", "BlackMamba", "WhiteSnow")
@@ -392,6 +464,85 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
             chatMessages.add(ChatMessage(botNames.random(), botResponses.random()))
         }
+    }
+
+    private fun listenToLobbyChat(lobbyId: String) {
+        chatListenerRegistration?.remove()
+        val fs = firestore ?: return
+        chatListenerRegistration = fs.collection("lobbies").document(lobbyId).collection("messages")
+            .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+                val messages = mutableListOf<ChatMessage>()
+                for (doc in snapshot.documents) {
+                    val author = doc.getString("author") ?: ""
+                    val text = doc.getString("text") ?: ""
+                    val isSystem = doc.getBoolean("isSystem") ?: false
+                    messages.add(ChatMessage(author, text, isSystem = isSystem))
+                }
+                if (messages.isNotEmpty()) {
+                    chatMessages.clear()
+                    chatMessages.addAll(messages)
+                }
+            }
+    }
+
+    // Sync my player position to Firestore
+    fun syncMyPositionToFirebase() {
+        val fs = firestore ?: return
+        val lobby = _currentLobby.value ?: return
+        val myChar = _characters.value.firstOrNull { it.id == myCharacterId } ?: return
+        
+        val data = hashMapOf(
+            "name" to myChar.name,
+            "x" to myChar.x,
+            "y" to myChar.y,
+            "isDead" to myChar.isDead,
+            "colorName" to myChar.colorName,
+            "hatId" to myChar.hatId,
+            "skinId" to myChar.skinId,
+            "petId" to myChar.petId
+        )
+        fs.collection("lobbies").document(lobby.id)
+            .collection("positions").document(myChar.name).set(data)
+    }
+
+    // Listen for other player positions
+    fun listenToOtherPlayerPositions(lobbyId: String) {
+        positionsListenerRegistration?.remove()
+        val fs = firestore ?: return
+        val profile = playerProfile.value ?: PlayerProfile()
+        
+        positionsListenerRegistration = fs.collection("lobbies").document(lobbyId).collection("positions")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+                val currentList = _characters.value.toMutableList()
+                var updated = false
+                for (doc in snapshot.documents) {
+                    val name = doc.id
+                    if (name != profile.playerName) {
+                        val x = doc.getDouble("x")?.toFloat() ?: 500f
+                        val y = doc.getDouble("y")?.toFloat() ?: 200f
+                        val isDead = doc.getBoolean("isDead") ?: false
+                        
+                        val index = currentList.indexOfFirst { it.name == name }
+                        if (index != -1) {
+                            val char = currentList[index]
+                            if (char.x != x || char.y != y || char.isDead != isDead) {
+                                currentList[index] = char.copy(
+                                    x = x,
+                                    y = y,
+                                    isDead = isDead
+                                )
+                                updated = true
+                            }
+                        }
+                    }
+                }
+                if (updated) {
+                    _characters.value = currentList
+                }
+            }
     }
 
     private fun simulateLobbyChat() {
@@ -419,15 +570,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val lobby = _currentLobby.value ?: return
         val profile = playerProfile.value ?: PlayerProfile()
 
-        // Create player & 9 bot characters
+        // Create player, any real players from Firebase, and fill remaining slots with bots
         val list = mutableListOf<GameCharacter>()
-        val botColors = AmongUsColors.keys.toMutableList()
-        botColors.remove(profile.colorName)
-
-        val botNames = mutableListOf(
-            "CyanPanda", "LimeJuice", "Pinky", "OrangeJuice", "BlackMamba", "WhiteSnow", "YellowSub", "PurpleRain", "RedStorm", "GreenField"
-        ).shuffled().toMutableList()
-
+        
         myCharacterId = "player_user"
 
         // Randomly select Impostor indices
@@ -435,7 +580,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val impostorsCount = lobby.impostorCount.coerceIn(1, 3)
         val impostorIndices = (0 until totalPlayers).shuffled().take(impostorsCount).toSet()
 
-        // Add User
+        // Add User (index 0)
         val userIsImpostor = impostorIndices.contains(0)
         list.add(
             GameCharacter(
@@ -452,11 +597,51 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
         )
 
-        // Add 9 Bots
-        for (i in 1 until totalPlayers) {
-            val botName = botNames.getOrNull(i - 1) ?: "Bot $i"
-            val botColor = botColors.getOrNull(i - 1) ?: "White"
-            val botIsImpostor = impostorIndices.contains(i)
+        // Parse and add any other real players in the lobby (excluding ourselves)
+        val realPlayers = lobby.playersList.mapNotNull { str ->
+            val parts = str.split("|")
+            if (parts.size >= 5) {
+                val name = parts[0]
+                val color = parts[1]
+                val hat = parts[2]
+                val skin = parts[3]
+                val pet = parts[4]
+                if (name != profile.playerName) {
+                    val idxInList = list.size
+                    val isImpostor = impostorIndices.contains(idxInList)
+                    GameCharacter(
+                        id = "player_$name",
+                        name = name,
+                        colorName = color,
+                        isImpostor = isImpostor,
+                        isBot = false, // Real player replacing a clanker!
+                        x = 500f + (-80..80).random(),
+                        y = 200f + (-80..80).random(),
+                        hatId = hat,
+                        skinId = skin,
+                        petId = pet
+                    )
+                } else null
+            } else null
+        }
+        list.addAll(realPlayers)
+
+        // Fill remaining slots up to 10 with bots (clankers)
+        val neededBots = (totalPlayers - list.size).coerceAtLeast(0)
+        
+        val botColors = AmongUsColors.keys.toMutableList()
+        list.forEach { botColors.remove(it.colorName) }
+
+        val botNames = mutableListOf(
+            "CyanPanda", "LimeJuice", "Pinky", "OrangeJuice", "BlackMamba", "WhiteSnow", "YellowSub", "PurpleRain", "RedStorm", "GreenField"
+        ).shuffled().toMutableList()
+        list.forEach { botNames.remove(it.name) }
+
+        for (i in 0 until neededBots) {
+            val botName = botNames.getOrNull(i) ?: "Bot ${i + 1}"
+            val botColor = botColors.getOrNull(i) ?: "White"
+            val idxInList = list.size
+            val botIsImpostor = impostorIndices.contains(idxInList)
 
             // Random hat/skin for bots
             val hats = listOf("none", "sprout", "toilet_paper", "viking", "chef", "cowboy", "astronaut")
@@ -465,11 +650,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             list.add(
                 GameCharacter(
-                    id = "bot_$i",
+                    id = "bot_$idxInList",
                     name = botName,
                     colorName = botColor,
                     isImpostor = botIsImpostor,
-                    isBot = true,
+                    isBot = true, // This remains a fallback bot
                     x = 500f + (-80..80).random(),
                     y = 200f + (-80..80).random(),
                     hatId = hats.random(),
@@ -618,6 +803,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun tickGame() {
         val currentList = _characters.value.toMutableList()
+
+        // Sync position to Firebase if enabled
+        tickCounter++
+        if (tickCounter % 15 == 0) {
+            syncMyPositionToFirebase()
+        }
 
         // 1. Update user cooldowns if user is Impostor
         val myUser = currentList.firstOrNull { it.id == myCharacterId }

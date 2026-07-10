@@ -14,7 +14,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.game.*
+import com.example.data.PlayerProfile
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -716,6 +719,54 @@ fun LobbyBrowserView(viewModel: GameViewModel) {
     }
 }
 
+@Composable
+fun LobbyPlayerChip(name: String, colorName: String, isHost: Boolean, isPlaceholder: Boolean = false) {
+    val rawColor = AmongUsColors[colorName] ?: Color.Gray
+    val displayColor = if (isPlaceholder) Color.DarkGray.copy(alpha = 0.3f) else rawColor
+
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isHost) Color(0xFFF1C40F) else displayColor.copy(alpha = 0.3f)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isPlaceholder) Color(0x10FFFFFF) else Color(0xFF1E272C)
+        ),
+        modifier = Modifier.width(90.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .background(displayColor, CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+            ) {
+                if (isHost) {
+                    Text(
+                        text = "👑",
+                        fontSize = 9.sp,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = name,
+                color = if (isPlaceholder) Color.Gray else Color.White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
 // 3. LOBBY ROOM SCREEN (Lobby room before starting game)
 @Composable
 fun LobbyRoomView(viewModel: GameViewModel) {
@@ -777,12 +828,59 @@ fun LobbyRoomView(viewModel: GameViewModel) {
                 ) {
                     Text("Map: The Skeld", color = Color.White, fontSize = 12.sp)
                     Text("Impostors: ${lobby?.impostorCount}", color = Color.Red, fontSize = 12.sp)
-                    Text("Players: 10/10 (Bots ready)", color = Color(0xFF2ECC71), fontSize = 12.sp)
+                    Text("Players: ${lobby?.playersCount ?: 1}/10", color = Color(0xFF2ECC71), fontSize = 12.sp)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Players Joined Section
+        Text(
+            text = "SHIPS CREW (${lobby?.playersCount ?: 1}/10)",
+            color = Color.Gray,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+
+        // Horizontal scrollable crew list
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val playersList = lobby?.playersList ?: emptyList()
+            if (playersList.isEmpty()) {
+                // Offline mode: Show yourself and 9 Bot placeholders
+                val profile = viewModel.playerProfile.value ?: PlayerProfile()
+                item {
+                    LobbyPlayerChip(name = profile.playerName, colorName = profile.colorName, isHost = true)
+                }
+                items(9) { i ->
+                    LobbyPlayerChip(name = "Bot ${i + 1}", colorName = "White", isHost = false)
+                }
+            } else {
+                // Real synced list from Firebase!
+                items(playersList) { str ->
+                    val parts = str.split("|")
+                    val name = parts.getOrNull(0) ?: "Unknown"
+                    val colorName = parts.getOrNull(1) ?: "White"
+                    val isHost = name == lobby?.host
+                    LobbyPlayerChip(name = name, colorName = colorName, isHost = isHost)
+                }
+                // Fill up remaining slots with bot placeholders
+                val neededBots = 10 - playersList.size
+                if (neededBots > 0) {
+                    items(neededBots) { i ->
+                        LobbyPlayerChip(name = "Bot Slot", colorName = "Gray", isHost = false, isPlaceholder = true)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Chat timeline log viewport
         Box(

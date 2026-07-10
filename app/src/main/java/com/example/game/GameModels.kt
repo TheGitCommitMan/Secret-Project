@@ -25,7 +25,8 @@ data class LobbyInfo(
     val maxPlayers: Int = 10,
     val mapName: String = "The Skeld",
     val impostorCount: Int = 1,
-    val code: String = (1..6).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZ".random() }.joinToString("")
+    val code: String = (1..6).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZ".random() }.joinToString(""),
+    val playersList: List<String> = emptyList()
 )
 
 enum class MapName {
